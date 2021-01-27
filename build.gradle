@@ -19,6 +19,7 @@ dependencies {
 }
 
 test {
+    dependsOn(clean)
     project.delete(files("${buildDir}/../allure-results"))
     useTestNG()
     systemProperties(System.properties)
