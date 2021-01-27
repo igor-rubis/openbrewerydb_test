@@ -1,77 +1,59 @@
-import io.qameta.allure.Allure;
-import io.restassured.filter.log.RequestLoggingFilter;
-import io.restassured.filter.log.ResponseLoggingFilter;
-import org.testng.Assert;
-import org.testng.annotations.AfterTest;
+import io.qameta.allure.restassured.AllureRestAssured;
+import io.restassured.response.Response;
 import org.testng.annotations.BeforeClass;
-import org.testng.annotations.BeforeTest;
 import org.testng.annotations.Test;
 
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.List;
 
 import static io.restassured.RestAssured.*;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
 
 public class ExampleTestSuite {
-    PrintStream printToFile;
-    String fileLocation;
-    String fileName;
-
     @BeforeClass
     public void setup() {
         baseURI = System.getProperty("host");
         port = Integer.parseInt(System.getProperty("port"));
+        filters(new AllureRestAssured());
     }
 
-    @BeforeTest
-    public void preconditions() throws FileNotFoundException {
-        fileLocation = System.getProperty("user.dir") + "/build/tmp";
-        fileName = System.currentTimeMillis() + ".log";
-        File outputFile = new File(fileLocation, fileName);
-        FileOutputStream fileOutput = new FileOutputStream(outputFile);
-        printToFile = new PrintStream(fileOutput);
+    public static Response searchBreweries(String parameter, int expectedStatusCode) {
+        return given().when().get("/breweries/search?query=" + parameter).then().statusCode(expectedStatusCode).extract().response();
     }
 
-    @AfterTest
-    public void attachments() throws IOException {
-        Path content = Paths.get(fileLocation + "\\" + fileName);
-        try (InputStream is = Files.newInputStream(content)) {
-            Allure.addAttachment("logs", is);
-        }
-    }
-
-    @Test(description = "test 1")
+    @Test(description = "Search for specific brewery")
     public void test1() {
-        given().filters(new RequestLoggingFilter(printToFile), new ResponseLoggingFilter(printToFile))
-                .log().all()
-                .when().get("/breweries/search?query=dog")
-                .then()
-                .log().all()
-                .statusCode(200)
-                .assertThat()
-                .body("data.leagueId", equalTo(35));
+        List<Integer> idList = searchBreweries("Diving Dog Brewhouse", 200).jsonPath().getList("id");
+
+        assertThat(idList.size(), equalTo(1));
+        assertThat(idList.get(0), equalTo(530));
     }
 
-    @Test(description = "test 2")
+    @Test(description = "SQL injection")
     public void test2() {
-        Assert.assertEquals(1, 1);
+        List<Integer> idList = searchBreweries("dog'+OR+1=1--", 200).jsonPath().getList("id");
+
+        assertThat(idList.size(), equalTo(0));
     }
 
-    @Test(description = "test 3")
+    @Test(description = "Empty search term")
     public void test3() {
-        Assert.assertEquals(1, 1);
+        List<Integer> idList = searchBreweries("", 200).jsonPath().getList("id");
+
+        assertThat(idList.size(), equalTo(0));
     }
 
-    @Test(description = "test 4")
+    @Test(description = "Unexpected query string parameter")
     public void test4() {
-        Assert.assertEquals(1, 1);
+        List<Integer> idList = given().when().get("/breweries/search?term=dog").then().statusCode(200).extract().response().jsonPath().getList("id");
+
+        assertThat(idList.size(), equalTo(0));
     }
 
-    @Test(description = "test 5")
+    @Test(description = "No query string parameters specified")
     public void test5() {
-        Assert.assertEquals(1, 1);
+        List<Integer> idList = given().when().get("/breweries/search").then().statusCode(200).extract().response().jsonPath().getList("id");
+
+        assertThat(idList.size(), equalTo(0));
     }
 }
